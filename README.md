@@ -35,5 +35,6 @@ f | Jump to (and view) Frontpahe
 m | Jump to Modules
 d | Jump to Discussions
 g | Reload page
-n or <tab> | Next clickable item
-p or <backtab> | Previous clickable item
+q | Exit page
+n or tab | Next clickable item
+p or backtab | Previous clickable item
