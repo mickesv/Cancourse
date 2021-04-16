@@ -28,6 +28,7 @@ First, clone the repository somewhereto (e.g. your site-lisp dir).
 ## Commands
 
 Key | command
+--- | --- 
 a | Jump to Announcements
 s | Jump to Assignments
 f | Jump to (and view) Frontpahe
