@@ -25,7 +25,10 @@
 ;;
 ;;; Commentary:
 ;; I used https://github.com/paulodder/canvas-emacs as a starting point.
-;; 
+;; Canvas REST Api documentation: https://canvas.instructure.com/doc/api/index.html
+;;
+;; SETUP
+;; 0. clone this repo.
 ;; 1. Generate a canvas token under Account > Setting > Approved Integrations
 ;; 2. set `canvas-token` to this token.
 ;; 3. Set `canvas-baseurl` to the base url for your institution
@@ -47,8 +50,10 @@
 ;;; Code:
 
 ;; TODO: refactor the insert-modules mess and make it generically usable
-;; TODO: insert-assignmetns and insert-announcements are so similar so they ought to be mergable
+;; TODO: insert-assignments and insert-announcements are so similar so they ought to be mergable
 ;; TODO: next-button stumbles upon hidden overlay
+;; TODO: Insert "open course in browser" button
+;; TODO: Insert "Open discussion in browser" buttons
 
 (require 'request)
 (require 'json)
