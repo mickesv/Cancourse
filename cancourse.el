@@ -1,4 +1,4 @@
-;;; cancourse --- View a Canvas course
+;;; cancourse --- View a Canvas course -*- lexical-binding t; -*-
 ;;
 ;;; Copyright (c) 2021 Mikael Svahnberg
 ;;
@@ -51,7 +51,6 @@
 
 ;; TODO: refactor the insert-modules mess and make it generically usable
 ;; TODO: insert-assignments and insert-announcements are so similar so they ought to be mergable
-;; TODO: next-button stumbles upon hidden overlay
 ;; TODO: Insert "open course in browser" button
 ;; TODO: Insert "Open discussion in browser" buttons
 
@@ -76,21 +75,17 @@
   :group 'cancourse)
 
 (defface cancourse-course-title-face
-  '((t :height 2.0
-       :foreground "#808080"
-       :inherit 'default))
+  '((t :inherit 'org-level-1))
   "Face for Course Title"
   :group 'cancourse)
 
 (defface cancourse-section-heading-face
-  '((t :height 1.5
-       :foreground "#808080"
-       :inherit 'default))
+  '((t :inherit 'org-level-2))
   "Face for Cancourse section heading"
   :group 'cancourse)
        
 (defface cancourse-collapsed-marker-face
-  '((t :inherit 'default))
+  '((t :inherit 'org-ellipsis))
   "Face for cancourse collapsed item"
   :group 'cancourse)
 
@@ -118,7 +113,9 @@
                      "&")))
 
 (defun cancourse--get (endpoint &optional treatment request-type request-params)
-  "Retrieve url ENDPOINT. TREATMENT is either 'json or 'raw."
+  "Retrieve url ENDPOINT. TREATMENT is either 'json or 'raw.
+REQUEST-TYPE is usually GET.
+REQUEST-PARAMS is an alist ((param-name . param value) ... )"
   (let ((json-params (json-encode request-params))
         (target (concat
                  (if (not (string-prefix-p canvas-baseurl endpoint)) canvas-baseurl "")
@@ -153,7 +150,7 @@
 ;; Retrievers
 
 (defun cancourse--get-userid (&optional reload)
-  "Get User id."
+  "Get User id. RELOAD if t."
   (if (or reload (not cancourse--userid))
       (setq cancourse--userid
             (cdar (cancourse--get-value '(id)
@@ -161,7 +158,7 @@
     cancourse--userid))
 
 (defun cancourse--get-course-list (&optional reload)
-  "Get list of courses for user."
+  "Get list of courses for user. RELOAD if t."
   (cancourse--get (format cancourse--api-list-courses
                           (cancourse--get-userid reload))
                   'json
@@ -246,10 +243,10 @@
           (if skip-eol "" "\n")))
 
 (defun cancourse--insert-text-toggle (short-text long-text &optional hidden padding)
-  "Insert SHORT-TEXT that can be clicked to expose LONG-TEXT, maybe initially HIDDEN ."
+  "Insert SHORT-TEXT that can be clicked to expose LONG-TEXT, maybe initially HIDDEN. use PADDING between short and long text."
   (let* ((start-button (point))
          (end-button (progn
-                       (insert (or short-text "no title"))
+                       (insert (propertize (or short-text "no title") 'link-item t))
                        (point)))
          (pad (insert (or padding " ")))
          (start-text (point))
@@ -265,7 +262,7 @@
     (overlay-put overlay 'invisible hidden)))
 
 (defun cancourse--insert-collapsible-section (heading body &optional hidden)
-  "Insert a whole collapsed section BODY under HEADING."
+  "Insert a whole collapsed (if HIDDEN is t) section BODY under HEADING."
   (cancourse--insert-heading heading t)
   (insert " ")
   (cancourse--insert-text-toggle
@@ -275,6 +272,7 @@
    "\n"))
 
 (defun cancourse--goto-heading (heading)
+  "Jump to HEADING."
   (let (match found)
     (goto-char (point-min))
     (while (and (not found)
@@ -283,17 +281,32 @@
                                     (prop-match-beginning match)
                                     (prop-match-end match)))))))
 
-  
+(defun cancourse--goto-link-item (direction)
+  "Jump to next link item. if DIRECTION is positive jump forward, otherwise backwards."
+  (let* ((origin (point))
+         (search-fun (if (< 0 direction)
+                         #'text-property-search-forward
+                       #'text-property-search-backward))
+         (match (funcall search-fun 'link-item)))
+    (while (and (>= origin (prop-match-beginning match))
+                (<= origin (prop-match-end match)))
+      (setq match (funcall search-fun 'link-item)))
+    (when match (goto-char (prop-match-beginning match)))))
+
 ;; Page Contents
 ;; --------------------
-(defun cancourse--select-course (&optional reload)
-  "Prompt user to select a course. if RELOAD, force a reload. Return courseid."
+(defun cancourse--maybe-reload-course-list (&optional reload)
+  "Reload course list if RELOAD is set."
   (when (or reload (not cancourse--course-list))
     (let* ((data (cancourse--get-course-list reload))
            (sorted (sort data (lambda (a b)
                                 (string-greaterp (cdar (cancourse--get-value '(start_at) a))
                                                  (cdar (cancourse--get-value '(start_at) b)))))))
-    (setq cancourse--course-list sorted)))
+      (setq cancourse--course-list sorted))))
+  
+(defun cancourse--select-course (&optional reload)
+  "Prompt user to select a course. if RELOAD, force a reload. Return courseid."
+  (cancourse--maybe-reload-course-list reload)
   (cancourse--select-from-prompt cancourse--course-list
                                  "Select Course:"
                                  '(name)))
@@ -423,8 +436,7 @@
                      (url (cdar (cancourse--get-value '(html_url) item)))
                      (body (cancourse--render-page (or (cdar (cancourse--get-value '(message) item)) ""))))
                  (insert " - ")
-                 (cancourse--insert-text-toggle (concat (when (< 0 unread) (format "[%d] " unread) "")
-                                                        heading)
+                 (cancourse--insert-text-toggle (concat (when (< 0 unread) (format "[%d] " unread) "") heading)
                                                 body
                                                 t
                                                 "\n")))
@@ -461,14 +473,16 @@
          (course (cancourse--get-item '(id) courseid cancourse--course-list))
          (course-name (cdar (cancourse--get-value '(name) course)))
          (buffer (get-buffer-create (concat "*Canvas Course "
-                                         course-name
-                                         "*"))))
+                                            course-name
+                                            "*"))))
     (set-buffer buffer)
     (cancourse-mode)
     (cancourse--generate-page courseid)
     (switch-to-buffer buffer)
     (concat "<EOP>")))
 
+;;;###autoload
+(defalias 'caco 'cancourse)
 
 ;; Keyed commands
 ;; --------------------
@@ -509,6 +523,16 @@
   (interactive)
   (backward-button 1))
 
+(defun cancourse-next-link-item ()
+  "Jump to start of next link item."
+  (interactive)
+  (cancourse--goto-link-item 1))
+
+(defun cancourse-prev-link-item ()
+  "Jump to start of previous link item."
+  (interactive)
+  (cancourse--goto-link-item -1))
+
 (defun cancourse-reload-page ()
   "Reload and refetch page."
   (interactive)
@@ -532,24 +556,10 @@
 (define-key cancourse-mode-map (kbd "m") 'cancourse-view-modules)
 (define-key cancourse-mode-map (kbd "d") 'cancourse-view-discussions)
 (define-key cancourse-mode-map (kbd "g") 'cancourse-reload-page)
-(define-key cancourse-mode-map (kbd "n") 'cancourse-next-button)
-(define-key cancourse-mode-map (kbd "p") 'cancourse-prev-button)
+(define-key cancourse-mode-map (kbd "n") 'cancourse-next-link-item)
+(define-key cancourse-mode-map (kbd "p") 'cancourse-prev-link-item)
 (define-key cancourse-mode-map (kbd "<tab>") 'cancourse-next-button)
 (define-key cancourse-mode-map (kbd "<backtab>") 'cancourse-prev-button)
-
-;; (defvar cancourse-mode-hook nil)
-;; (defvar cancourse-mode-map nil)
-
-;; (defun cancourse-mode ()
-;;   "Major mode for Cancourse.
-;; Special commands:
-;; \\{cancourse-mode-map}"
-;;   (interactive)
-;;   (kill-all-local-variables)
-;;   (setq major-mode 'cancourse-mode)
-;;   (setq mode-name "cancourse-view-course")
-;;   (use-local-map cancourse-mode-map)
-;;   (run-hooks cancourse-mode-hook))
 
 ;;; provides:
 (provide 'cancourse)
